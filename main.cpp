@@ -5,7 +5,7 @@ https://os.mbed.com/users/aberk/code/PID/docs/tip/classPID.html#a9f407b18ba6235c
 */
 
 /* 
-##########  parameters to adjust for line following ##########
+##########  parameters for line following adjustment ##########
 full_speed - duty cycle of pwm period for motor drive
 rate - PID controller refresh rate
 period - while loop refresh time (motor drive changes at this rate
