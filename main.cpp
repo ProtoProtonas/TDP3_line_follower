@@ -5,7 +5,7 @@ https://os.mbed.com/users/aberk/code/PID/docs/tip/classPID.html#a9f407b18ba6235c
 */
 
 /* 
-##########  parameters for line following adjustment ##########
+##########  parameters to adjust for line following ##########
 full_speed - duty cycle of pwm period for motor drive
 rate - PID controller refresh rate
 period - while loop refresh time (motor drive changes at this rate
@@ -34,8 +34,10 @@ PwmOut left_pwm(PTD2); // for left side motors
 DigitalOut left_direction(PTD3); // 0 - forward, 1 - backward
 
 //inputs from line sensors
-AnalogIn right_line_sensor(PTB0);
-AnalogIn left_line_sensor(PTB1);
+DigitalIn line_sensor_1(PTA17);
+DigitalIn line_sensor_2(PTA16);
+DigitalIn line_sensor_3(PTC17);
+DigitalIn line_sensor_4(PTC16);
 
 // inputs from colour sensors
 /*DigitalIn red_sensor(PTA4);
@@ -167,7 +169,12 @@ int main() {
         next_time = started + period;
 
         // setup input for the pid controller
-        pid_input = left_line_sensor.read() - right_line_sensor.read(); // negative - left sensor has lower value (is over the black line) and vice versa
+        
+        //    driving direction ↑↑↑↑↑
+        //          line →   ||
+        //   sensors  1    2    3   4   
+        
+        pid_input = -0.5*line_sensor_1.read() - 0.25*line_sensor_2.read() + 0.25*line_sensor_3.read() + 0.5*line_sensor_4.read(); // negative - left sensor has lower value (is over the black line) and vice versa
         controller.setProcessValue(pid_input);
         //disect the output of the pid controller and turn it into outputs for the two sets of wheels
         co = controller.compute(); // range [-1; 1]
