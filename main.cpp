@@ -1,6 +1,7 @@
 /* possibly useful stuff
 
 https://os.mbed.com/users/aberk/code/PID/docs/tip/classPID.html#a9f407b18ba6235cb96fa95611c1ea3a4
+https://os.mbed.com/media/uploads/rikabel/kl25z-pinout-revised.jpg
 
 */
 
