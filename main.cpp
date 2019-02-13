@@ -41,15 +41,16 @@ DigitalIn line_sensor_3(PTC17);
 DigitalIn line_sensor_4(PTC16);
 
 // inputs from colour sensors
-/*DigitalIn red_sensor(PTA4);
-DigitalIn blue_sensor(PTA5);*/
+DigitalIn red_sensor(PTA4);
+DigitalIn blue_sensor(PTA5);
 
 // for timing
 Timer always_on;
 
 //flags for ISR
-/*int disc_taken = 0; // 0 - no disc on robot, 1 - disc is in the robot
-int disc_colour = 0; // 0 - red, 1 - blue*/
+int disc_taken = 0; // 0 - no disc on robot, 1 - disc is in the robot
+int disc_colour = 0; // 0 - red, 1 - blue
+int intersection_bar = 1; //0 - robot is at intersection; 1 - robot is not at intersection
 
 
 
@@ -79,7 +80,7 @@ void stop() {
     right_direction = 1;
     left_direction = 1;
     right_pwm.write(0.3);
-    left_pwm.write(0.3`);
+    left_pwm.write(0.3);
     wait(braking_time);
 
     right_direction = 0;
@@ -92,7 +93,7 @@ void stop() {
 
 
 
-/*void detect_colour() {
+void detect_colour() {
     if (red_sensor == 1) {
         disc_colour = 0;
         disc_taken = 1; // turns on the solenoid
@@ -106,7 +107,7 @@ void stop() {
 
 
 void intersection() {
-    if ((right_line_sensor < 0.5) && (left_line_sensor < 0.5) && (disc_taken == 1)) { // detects the first intersection where the robot has to choose the path
+    if ((!intersection_bar) && (disc_taken == 1)) { // detects the first intersection where the robot has to choose the path
         stop();
         wait(0.5);
         if (disc_colour == 0) {
@@ -117,7 +118,7 @@ void intersection() {
         }
     }
 
-    if ((right_line_sensor < 0.5) && (left_line_sensor < 0.5) && (disc_taken == 0)) { // detects intersection where robot has to get back on the right track (turn the same way as it turned at first)
+    if ((!intersection_bar) && (disc_taken == 0)) { // detects intersection where robot has to get back on the right track (turn the same way as it turned at first)
         stop();
         wait(0.5);
         if (disc_colour == 0) {
@@ -128,7 +129,7 @@ void intersection() {
         }
     }
 
-}*/
+}
 
 
 
@@ -175,14 +176,14 @@ int main() {
         //          line →   ||
         //   sensors  1    2    3   4   
         
-        pid_input = -0.5*line_sensor_1.read() - 0.25*line_sensor_2.read() + 0.25*line_sensor_3.read() + 0.5*line_sensor_4.read(); // negative - left sensor has lower value (is over the black line) and vice versa
+        pid_input = intersection_bar*(-0.5*line_sensor_1.read() - 0.25*line_sensor_2.read()) + intersection_bar*(0.25*line_sensor_3.read() + 0.5*line_sensor_4.read()); // negative - left sensor has lower value (is over the black line) and vice versa
         controller.setProcessValue(pid_input);
         //disect the output of the pid controller and turn it into outputs for the two sets of wheels
         co = controller.compute(); // range [-1; 1]
-        if (co - threshold > 0) {
+        if (co > 0) {
             turn_left(1 - abs(co));
         }
-        else if (co + threshold < 0) {
+        else if (co < 0) {
             turn_right(1 - abs(co));
         }
         else {
