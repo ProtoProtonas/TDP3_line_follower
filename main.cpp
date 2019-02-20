@@ -17,35 +17,46 @@ threshold - threshold at which nothing is done to adjust the course of the robot
 #include "mbed.h"
 #include "PID.h"
 
-#define full_speed 0.7f
+#define full_speed 0.5f
 #define zero 0.0f
 #define braking_time 0.2
-#define rate 0.01f
-#define period 12500 // in microseconds
-#define threshold 0.05
+#define rate 0.01f    // PID controller rate
+#define period 10000 //0.01s; main loop timing in microseconds
+#define threshold 0.0f
 #define pwm_period 2000 // in microseconds for motor drive
 
 //PID stuff -  Kc, Ti, Td, interval
-PID controller(1.0, 0.0, 0.0, rate);
+PID controller(5.0, 0.0, 0.0, rate); // 3, 0, 0 was goog
 
 // varialbles for driving motors
 PwmOut right_pwm(PTD5); //for right side motors
 DigitalOut right_direction(PTD0); // 0 - forward, 1 - backward
 PwmOut left_pwm(PTD2); // for left side motors
 DigitalOut left_direction(PTD3); // 0 - forward, 1 - backward
+DigitalOut status_led(PTB19);
+DigitalOut blue_led (PTD1);
+
+
 
 //inputs from line sensors
-DigitalIn line_sensor_1(PTA17);
-DigitalIn line_sensor_2(PTA16);
-DigitalIn line_sensor_3(PTC17);
-DigitalIn line_sensor_4(PTC16);
+DigitalIn line_sensor_1(PTC12);
+DigitalIn line_sensor_2(PTA13);
+DigitalIn line_sensor_3(PTC16);
+DigitalIn line_sensor_4(PTC17);
+DigitalIn line_sensor_5(PTA16);
+DigitalIn line_sensor_6(PTA17);
+DigitalIn line_sensor_7(PTD6);
+DigitalIn line_sensor_8(PTD7);
+
+
+// for timing
+Timer always_on;
+Timeout to;
 
 // inputs from colour sensors
 DigitalIn red_sensor(PTA4);
 DigitalIn blue_sensor(PTA5);
 
-// for timing
-Timer always_on;
 
 //flags for ISR
 int disc_taken = 0; // 0 - no disc on robot, 1 - disc is in the robot
@@ -91,7 +102,7 @@ void stop() {
 
 
 
-
+/*
 
 void detect_colour() {
     if (red_sensor == 1) {
@@ -133,7 +144,29 @@ void intersection() {
 
 
 
-// 
+*/
+
+
+void intersection() {
+    if ((line_sensor_4.read() + line_sensor_5.read()) == 2) {
+        if ((line_sensor_6.read() == 0) || (line_sensor_7.read() == 0) || (line_sensor_8.read() == 0)) {
+            if ((line_sensor_3.read() == 0) || (line_sensor_2.read() == 0) || (line_sensor_1.read() == 0)) {
+                intersection_bar = 0;
+            }
+        }
+    }
+}
+
+/*
+void pickup_disk() {
+    // TODO: solenoid driving software
+}
+
+void detect_colour() {
+    // colour detecting software
+    // change the int disc_colour flag
+}*/
+
 
 
 
@@ -147,11 +180,14 @@ void intersection() {
 
 int main() {
 
+
+    to.attach(&intersection, 0.02);
+    status_led = 1;
     // PID controler setup
-    controller.setInputLimits(-2.0, 2.0);
+    controller.setInputLimits(-1.0, 1.0);
     controller.setOutputLimits(-full_speed, full_speed);
     //If there's a bias.
-    //controller.setBias(0.3);
+    controller.setBias(0);
     controller.setMode(1); // 0 for manual, 1 for auto
     //desired input value
     controller.setSetPoint(0.0);
@@ -166,34 +202,42 @@ int main() {
     int started, next_time, now;
     float pid_input, co;
 
+    status_led = 0;
     while (1) {
+        blue_led = 1;
         started = always_on.read_us();
         next_time = started + period;
 
         // setup input for the pid controller
         
-        //    driving direction ↑↑↑↑↑
-        //          line →   ||
-        //   sensors  1    2    3   4   
+        //  driving direction  ↑↑↑↑↑↑
+        //           line →    ||||||
+        //    sensors  1  2  3  4  5  6  7  8  
         
-        pid_input = intersection_bar*(-0.5*line_sensor_1.read() - 0.25*line_sensor_2.read()) + intersection_bar*(0.25*line_sensor_3.read() + 0.5*line_sensor_4.read()); // negative - left sensor has lower value (is over the black line) and vice versa
+        pid_input = 0.5*line_sensor_1.read() + 0.25*line_sensor_2.read() + 0.125*line_sensor_3.read() + 0.0625*line_sensor_4.read() - 0.0625*line_sensor_5.read() - 0.125*line_sensor_6.read() - 0.25*line_sensor_7.read() - 0.5*line_sensor_8.read(); // negative - left sensor has lower value (is over the black line) and vice versa
         controller.setProcessValue(pid_input);
         //disect the output of the pid controller and turn it into outputs for the two sets of wheels
         co = controller.compute(); // range [-1; 1]
-        if (co > 0) {
-            turn_left(1 - abs(co));
-        }
-        else if (co < 0) {
-            turn_right(1 - abs(co));
+        if (intersection_bar == 1) {
+            if (co - threshold > 0) {
+                turn_left(1 - abs(co));
+            }
+            else if (co + threshold < 0) {
+                turn_right(1 - abs(co));
+            }
+            else {
+                forward();
+            }
         }
         else {
-            forward();
+            stop();
         }
 
-
+        blue_led = 0;
         //to control the rate of update
         now = always_on.read_us();
         while (now < next_time) { now = always_on.read_us(); }
+        
     }
 }
 
