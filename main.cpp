@@ -26,7 +26,7 @@ threshold - threshold at which nothing is done to adjust the course of the robot
 #define pwm_period 2000 // in microseconds for motor drive
 
 //PID stuff -  Kc, Ti, Td, interval
-PID controller(5.0, 0.0, 0.0, rate); // 3, 0, 0 was goog
+PID controller(5.0, 0.0, 0.0, rate); // 3, 0, 0 was good
 
 // varialbles for driving motors
 PwmOut right_pwm(PTD5); //for right side motors
