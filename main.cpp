@@ -17,18 +17,20 @@ threshold - threshold at which nothing is done to adjust the course of the robot
 #include "mbed.h"
 #include "PID.h"
 
-#define full_speed 0.5f
+#define full_speed 0.55f
 #define zero 0.0f
 #define braking_time 0.2
-#define rate 0.01f    // PID controller rate
-#define period 10000 //0.01s; main loop timing in microseconds
+#define rate 0.02f    // PID controller rate in seconds
+#define period 20000 //0.02s; main loop timing in microseconds
 #define threshold 0.0f
-#define pwm_period 2000 // in microseconds for motor drive
+#define pwm_period 1000 // in microseconds for motor drive
+#define blue_threshold 0.78f
+#define red_threshold 0.95f
 
 //PID stuff -  Kc, Ti, Td, interval
-PID controller(5.0, 0.0, 0.0, rate); // 3, 0, 0 was good
+PID controller(3, 0.1, 0.0, rate); // 3, 0, 0 was good
 
-// varialbles for driving motors
+// variables for driving motors
 PwmOut right_pwm(PTD5); //for right side motors
 DigitalOut right_direction(PTD0); // 0 - forward, 1 - backward
 PwmOut left_pwm(PTD2); // for left side motors
@@ -48,19 +50,24 @@ DigitalIn line_sensor_6(PTA17);
 DigitalIn line_sensor_7(PTD6);
 DigitalIn line_sensor_8(PTD7);
 
+int s1, s2, s3, s4, s5, s6, s7, s8;
+
 
 // for timing
 Timer always_on;
-Timeout to;
+Ticker to;
 
 // inputs from colour sensors
-DigitalIn red_sensor(PTA4);
-DigitalIn blue_sensor(PTA5);
+AnalogIn red_sensor(PTB0);
+AnalogIn blue_sensor(PTB1);
+
+// solenoid control output
+DigitalOut solenoid(PTC11);
 
 
 //flags for ISR
 int disc_taken = 0; // 0 - no disc on robot, 1 - disc is in the robot
-int disc_colour = 0; // 0 - red, 1 - blue
+int disc_colour = 0; // 0 - red, right, 1 - blue, left
 int intersection_bar = 1; //0 - robot is at intersection; 1 - robot is not at intersection
 
 
@@ -88,103 +95,66 @@ void turn_left(float variable_speed) {
 }
 
 void stop() {
-    right_direction = 1;
-    left_direction = 1;
-    right_pwm.write(0.3);
-    left_pwm.write(0.3);
-    wait(braking_time);
-
     right_direction = 0;
     left_direction = 0;
-    right_pwm.write(zero);
-    left_pwm.write(zero);
+    right_pwm.write(0);
+    left_pwm.write(0);
 }
 
 
 
-/*
-
 void detect_colour() {
-    if (red_sensor == 1) {
+    /*if ((red_sensor.read() == 1) && (blue_sensor.read() == 0)) {
         disc_colour = 0;
-        disc_taken = 1; // turns on the solenoid
+        disc_taken = 1; // raises flag
+        solenoid = 1; // turns on solenoid
     }
-    else if (blue_sensor == 1) {
+    else if ((red_sensor.read() == 0) && (blue_sensor.read() == 1)) {
         disc_colour = 1;
-        disc_taken = 1; // turns on the solenoid
+        disc_taken = 1; // raises flag
+        solenoid = 1; // turns on the solenoid
+    }*/
+    
+    // blue threshold 0.778787
+    // red threshold ~0.95
+    if ((red_sensor < red_threshold) && (blue_sensor < blue_threshold)) {
+        //red detected
+        disc_colour = 0;
+        disc_taken = 1; // raises flag
+        solenoid = 1; // turns on solenoid
+    } else if ((red_sensor > red_threshold) && (blue_sensor > blue_threshold)) {
+        //red detected
+        disc_colour = 0;
+        disc_taken = 1; // raises flag
+        solenoid = 1; // turns on solenoid
     }
 }
 
 
 
-void intersection() {
-    if ((!intersection_bar) && (disc_taken == 1)) { // detects the first intersection where the robot has to choose the path
-        stop();
-        wait(0.5);
-        if (disc_colour == 0) {
-            turn_left(0.5);
-        }
-        else if (disc_colour == 1) {
-            turn_right(0.5);
-        }
-    }
-
-    if ((!intersection_bar) && (disc_taken == 0)) { // detects intersection where robot has to get back on the right track (turn the same way as it turned at first)
-        stop();
-        wait(0.5);
-        if (disc_colour == 0) {
-            turn_left(0.5);
-        }
-        else if (disc_colour == 1) {
-            turn_right(0.5);
-        }
-    }
-
-}
-
-
-
-*/
-
-
-void intersection() {
-    if ((line_sensor_4.read() + line_sensor_5.read()) == 2) {
-        if ((line_sensor_6.read() == 0) || (line_sensor_7.read() == 0) || (line_sensor_8.read() == 0)) {
-            if ((line_sensor_3.read() == 0) || (line_sensor_2.read() == 0) || (line_sensor_1.read() == 0)) {
+// ISR funtion to detect intersection
+void intersection() {    
+    if ((line_sensor_6.read() == 0) || (line_sensor_7.read() == 0) || (line_sensor_8.read() == 0)) {
+        if ((line_sensor_3.read() == 0) || (line_sensor_2.read() == 0) || (line_sensor_1.read() == 0)) {
+            if ((line_sensor_4.read() + line_sensor_5.read()) == 2) {
                 intersection_bar = 0;
-            }
-        }
-    }
+            } else { intersection_bar = 1; }
+        } else { intersection_bar = 1; }
+    } else { intersection_bar = 1; }
 }
-
-/*
-void pickup_disk() {
-    // TODO: solenoid driving software
-}
-
-void detect_colour() {
-    // colour detecting software
-    // change the int disc_colour flag
-}*/
-
-
-
-
-
-
-
-
-
 
 
 
 int main() {
 
-
-    to.attach(&intersection, 0.02);
+    // attach ISR functions
+    to.attach(&intersection, 0.05);
+    
+    
+    
     status_led = 1;
     // PID controler setup
-    controller.setInputLimits(-1.0, 1.0);
+    controller.setInputLimits(-1, 1);
     controller.setOutputLimits(-full_speed, full_speed);
     //If there's a bias.
     controller.setBias(0);
@@ -214,10 +184,11 @@ int main() {
         //           line →    ||||||
         //    sensors  1  2  3  4  5  6  7  8  
         
-        pid_input = 0.5*line_sensor_1.read() + 0.25*line_sensor_2.read() + 0.125*line_sensor_3.read() + 0.0625*line_sensor_4.read() - 0.0625*line_sensor_5.read() - 0.125*line_sensor_6.read() - 0.25*line_sensor_7.read() - 0.5*line_sensor_8.read(); // negative - left sensor has lower value (is over the black line) and vice versa
+        /*pid_input = 0.5*line_sensor_1.read() + 0.25*line_sensor_2.read() + 0.125*line_sensor_3.read() + 0.0625*line_sensor_4.read() - 0.0625*line_sensor_5.read() - 0.125*line_sensor_6.read() - 0.25*line_sensor_7.read() - 0.5*line_sensor_8.read(); // negative - left sensor has lower value (is over the black line) and vice versa
+        
         controller.setProcessValue(pid_input);
         //disect the output of the pid controller and turn it into outputs for the two sets of wheels
-        co = controller.compute(); // range [-1; 1]
+        co = controller.compute(); // range [-full_speed; full_speed]
         if (intersection_bar == 1) {
             if (co - threshold > 0) {
                 turn_left(1 - abs(co));
@@ -230,7 +201,43 @@ int main() {
             }
         }
         else {
-            stop();
+            if (disc_colour == 0) {
+                turn_right(0.5);
+                wait(0.3);
+                intersection_bar = 1;
+            } else {
+                turn_left(0.5);
+                wait(0.3);
+                intersection_bar = 1;
+            }
+        }*/
+        
+        
+        
+        s1 = line_sensor_1.read();
+        s2 = line_sensor_2.read();        
+        s3 = line_sensor_3.read();        
+        s4 = line_sensor_4.read();        
+        s5 = line_sensor_5.read();        
+        s6 = line_sensor_6.read();        
+        s7 = line_sensor_7.read();        
+        s8 = line_sensor_8.read();
+        
+        pid_input = (0.5*s1 + 0.25*s2 + 0.125*s3+ 0.0625*s4 - 0.0625*s5 - 0.125*s6 - 0.25*s7 - 0.5*s8) * intersection_bar + (-0.9375 + 0.5*s1 + 0.25*s2 + 0.125*s3+ 0.0625*s4) * disc_colour * (!intersection_bar) - (-0.9375 + 0.5*s5 + 0.25*s6 + 0.125*s7+ 0.0625*s8) * (!disc_colour) * (!intersection_bar); // negative - left sensor has lower value (is over the black line) and vice versa
+        
+        
+        controller.setProcessValue(pid_input);
+        //disect the output of the pid controller and turn it into outputs for the two sets of wheels
+        co = controller.compute(); // range [-full_speed; full_speed]
+        
+        if (co > 0) {
+            turn_left(1 - abs(co));
+        }
+        else if (co < 0) {
+            turn_right(1 - abs(co));
+        }
+        else {
+            forward();
         }
 
         blue_led = 0;
