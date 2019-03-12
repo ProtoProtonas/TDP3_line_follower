@@ -19,8 +19,8 @@ threshold - threshold at which nothing is done to adjust the course of the robot
 #include "mbed.h"
 #include "PID.h"
 
-#define full_speed_straight 0.55f
-#define full_speed_turn 0.65f
+#define full_speed_straight 0.45f
+#define full_speed_turn 0.55f
 #define zero 0.0f
 #define braking_time 0.2f
 #define rate 0.05f    // PID controller rate in seconds
@@ -40,16 +40,14 @@ PID controller(Kc, Kc/Ki, Kd/Kc, rate);
 // variables for driving motors
 PwmOut right_pwm(PTD0); //for right side motors
 DigitalOut right_direction(PTD5); // 0 - forward, 1 - backward
-PwmOut left_pwm(PTC8); // for left side motors
-DigitalOut left_direction(PTC9); // 0 - forward, 1 - backward
-DigitalOut enable1(PTE29);
-DigitalOut enable2(PTE23);
+PwmOut left_pwm(PTC9); // for left side motors
+DigitalOut left_direction(PTC8); // 0 - forward, 1 - backward
+DigitalOut enable1(PTE21);
+DigitalOut enable2(PTE22);
 
 DigitalOut red_led(PTB18);
 DigitalOut blue_led(PTD1);
 DigitalOut green_led(PTB19);
-
-
 
 //inputs from line sensors
 DigitalIn line_sensor_1(PTC12);
@@ -78,11 +76,10 @@ DigitalOut solenoid(PTC11);
 
 //flags for ISR
 int disc_taken = 0; // 0 - no disc on robot, 1 - disc is in the robot
-int disc_colour = 1; // 0 - red, right, 1 - blue, left
+int disc_colour = 0; // 0 - red, right, 1 - blue, left
 int intersection_bar = 1; //0 - robot is at intersection; 1 - robot is not at intersection
-//int dropping_point = 0; // tells whether the robot is in the dropping point after the first and before second intersection
-
-
+int dropping_point = 0; // tells whether the robot is in the dropping point after the first and before second intersection
+int colour = 0;
 
 // motor drive functions (called from main loop)
 void forward() {
@@ -106,39 +103,104 @@ void turn_left(float variable_speed) {
     left_pwm.write(variable_speed);
 }
 
-void stop() {
+/*void stop() {
     right_direction = 0;
     left_direction = 0;
     right_pwm.write(0);
     left_pwm.write(0);
-}
+}*/
 
 
-
-void detect_colour() {
+/*void detect_colour() {
     
     if((red_sensor > red_threshold) && (blue_sensor > blue_threshold)) {
         // detecting blue background
-        /*blue_led = 0;
+        blue_led = 0;
         red_led = 1;
-        green_led = 1;*/
-        disc_colour = 1;
+        green_led = 1;
+        
+        if ((disc_taken == 0) && (dropping_point == 0)) {
+            disc_colour = 1;
+            solenoid = 1;
+            disc_taken = 1;
+        }
+        
+        else if ((disc_taken == 1) && (dropping_point == 1)){
+            solenoid = 0;
+            disc_taken = 0;
+            dropping_point = 0;
+        }
         
     } else if((blue_sensor < blue_threshold) && (red_sensor < red_threshold)) {
         // detecting red background
-        /*blue_led = 1;
+        blue_led = 1;
         red_led = 0;
-        green_led = 1;*/
-        disc_colour = 0;
+        green_led = 1;
+        
+        if ((disc_taken == 0) && (dropping_point == 0)) {
+            disc_colour = 0;
+            solenoid = 1;
+            disc_taken = 1;
+        }
+        
+        else if ((disc_taken == 1) && (dropping_point == 1)){
+            solenoid = 0;
+            disc_taken = 0;
+            dropping_point = 0;
+        }
         
     } else {
         // white background
         blue_led = 1;
         red_led = 1;
         green_led = 0;
+        dropping_point = 1;
+    }
+}*/
+
+void detect_colour() {
+    
+    if((red_sensor > red_threshold) && (blue_sensor > blue_threshold)) {
+        // detecting blue background
+        blue_led = 0;
+        red_led = 1;
+        green_led = 1;
+        
+        if(colour % 4 == 0) {
+            colour++;
+        }
+        
+        if(colour % 4 == 2) {
+            colour++;
+        }
+        
+    } else if((blue_sensor < blue_threshold) && (red_sensor < red_threshold)) {
+        // detecting red background
+        blue_led = 1;
+        red_led = 0;
+        green_led = 1;
+        
+        if(colour % 4 == 0) {
+            colour++;
+        }
+        if(colour % 4 == 2) {
+            colour++;
+        }
+        
+    } else {
+        // white background
+        blue_led = 1;
+        red_led = 1;
+        green_led = 0;
+        
+        if(colour % 4 == 1) {
+            colour++;
+        }
+        if(colour % 4 == 3) {
+            colour++;
+        }
     }
 }
-
 
 
 // ISR funtion to detect intersection
@@ -146,8 +208,14 @@ void intersection() {
     if ((line_sensor_6.read() == 0) || (line_sensor_7.read() == 0) || (line_sensor_8.read() == 0)) {
         if ((line_sensor_3.read() == 0) || (line_sensor_2.read() == 0) || (line_sensor_1.read() == 0)) {
             if ((line_sensor_4.read() + line_sensor_5.read()) == 2) {
+                
                 intersection_bar = 0;
-                //dropping_point = !dropping_point;
+                /*if (dropping_point == 0) {
+                    dropping_point = 1;
+                } else {
+                    dropping_point = 0;
+                }*/
+                
             } else { intersection_bar = 1; }
         } else { intersection_bar = 1; }
     } else { intersection_bar = 1; }
@@ -159,7 +227,7 @@ int main() {
 
     // attach ISR functions
     to.attach(&intersection, 0.05);
-    to.attach(&detect_colour, 0.13);
+    to.attach(&detect_colour, 0.07);
     
     
     blue_led = 1;
@@ -168,6 +236,7 @@ int main() {
     
     enable1 = 1;
     enable2 = 1;
+    
     
     // PID controler setup
     controller.setInputLimits(-1, 1);
@@ -198,13 +267,13 @@ int main() {
         //           line →    ||||||
         //    sensors  1  2  3  4  5  6  7  8  
         
-        if(disc_colour == 1) {
+        /*if(disc_colour == 1) {
             blue_led = 0;
             red_led = 1;
         } else {
             blue_led = 1;
             red_led = 0;
-        }
+        }*/
         
         pid_input = 0.5*line_sensor_1.read() + 0.25*line_sensor_2.read() + 0.125*line_sensor_3.read() + 0.0625*line_sensor_4.read() - 0.0625*line_sensor_5.read() - 0.125*line_sensor_6.read() - 0.25*line_sensor_7.read() - 0.5*line_sensor_8.read(); // negative - left sensor has lower value (is over the black line) and vice versa
        
@@ -225,14 +294,33 @@ int main() {
         else {
             if (disc_colour == 1) {
                 turn_left(0.5);
-                wait(0.3);
+                wait(1);
                 intersection_bar = 1;
+                //dropping_point = !dropping_point;
+                
             } else {
                 turn_right(0.5);
-                wait(0.3);
+                wait(1);
                 intersection_bar = 1;
+                //dropping_point = !dropping_point;
             }
         }
+        
+        if(colour % 4 == 1) {
+            solenoid = 1;
+            disc_taken = 1;
+        } else if(colour % 4 == 2) {
+            solenoid = 1;
+            disc_taken = 1;
+        } else if(colour % 4 == 3) {
+            solenoid = 0;
+            disc_taken = 0;
+        }
+        
+        
+        /*if(dropping_point == 1) {
+            green_led = 0;
+        } else { green_led = 1; }*/
         
         
         
