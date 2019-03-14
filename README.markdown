@@ -1,5 +1,5 @@
 # TDP3_line_follower
-Code for line following robot of Team Design Project 3 module
+## Code for line following robot of Team Design Project 3 module
 
 
 This is a code for Team Design Project 3 module in my 3rd year at University of Glasgow.
