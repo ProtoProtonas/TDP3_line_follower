@@ -19,11 +19,8 @@ threshold - threshold at which nothing is done to adjust the course of the robot
 #include "mbed.h"
 #include "PID.h"
 
-#define wait_for_drop 10000000
 #define full_speed_straight 0.55f
 #define full_speed_turn 0.60f
-#define zero 0.0f
-#define braking_time 0.2f
 #define rate 0.05f    // PID controller rate in seconds
 #define period 5000 // main loop timing in microseconds
 #define min_periods 8
@@ -35,7 +32,7 @@ threshold - threshold at which nothing is done to adjust the course of the robot
 //PID controller(15000.0, 10000.0, 0.0, rate); // 3, 0, 0 was good
 float Kc = 17.0;  // P
 float Ki = 60.0;  // I
-float Kd = 25.0;  // D
+float Kd = 10.0;  // D
 PID controller(Kc, Kc/Ki, Kd/Kc, rate);
 
 // variables for driving motors
@@ -60,13 +57,19 @@ DigitalIn line_sensor_6(PTA17);
 DigitalIn line_sensor_7(PTD6);
 DigitalIn line_sensor_8(PTD7);
 
+// ISD1700 controls
+/*DigitalOut play(PTB2);
+DigitalOut skip(PTC2);
+DigitalOut reset(PTB3);*/
+
+
 int s1, s2, s3, s4, s5, s6, s7, s8;
 
 
 // for timing
 Timer always_on;
 Ticker to;
-int started, next_time, now, intersection_time, drop_time;
+int started, next_time, now;
 
 // inputs from colour sensors
 AnalogIn red_sensor(PTB0);
@@ -77,9 +80,9 @@ DigitalOut solenoid(PTC11);
 
 
 //flags for ISR
-//int disc_taken = 0; // 0 - no disc on robot, 1 - disc is in the robot
 int disc_colour = 0; // 0 - red, right, 1 - blue, left
 int intersection_bar = 1; //0 - robot is at intersection; 1 - robot is not at intersection
+int intersection_bar_flag = 1;
 int dropping_point = 0; // tells whether the robot is in the dropping point after the first and before second intersection
 int colour = 0;
 int colour_detection_periods = 0;
@@ -107,66 +110,28 @@ void turn_left(float variable_speed) {
 }
 
 void stop() {
+    right_direction = 1;
+    left_direction = 1;
+    right_pwm.write(0.5);
+    left_pwm.write(0.5);
+    wait(0.05);
+
     right_direction = 0;
     left_direction = 0;
     right_pwm.write(0);
     left_pwm.write(0);
 }
 
-/*void detect_colour() {
-    
-    if((red_sensor > red_threshold) && (blue_sensor > blue_threshold)) {
-        // detecting blue background
-        blue_led = 0;
-        red_led = 1;
-        green_led = 1;
-        
-        if ((disc_taken == 0) && (dropping_point == 0)) {
-            disc_colour = 1;
-            solenoid = 1;
-            disc_taken = 1;
-        }
-        
-        else if ((disc_taken == 1) && (dropping_point == 1)){
-            solenoid = 0;
-            disc_taken = 0;
-            dropping_point = 0;
-        }
-        
-    } else if((blue_sensor < blue_threshold) && (red_sensor < red_threshold)) {
-        // detecting red background
-        blue_led = 1;
-        red_led = 0;
-        green_led = 1;
-        
-        if ((disc_taken == 0) && (dropping_point == 0)) {
-            disc_colour = 0;
-            solenoid = 1;
-            disc_taken = 1;
-        }
-        
-        else if ((disc_taken == 1) && (dropping_point == 1)){
-            solenoid = 0;
-            disc_taken = 0;
-            dropping_point = 0;
-        }
-        
-    } else {
-        // white background
-        blue_led = 1;
-        red_led = 1;
-        green_led = 0;
-        dropping_point = 1;
-    }
-}*/
-
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// ##########################################################
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 void detect_colour() {
     
     if((red_sensor > red_threshold) && (blue_sensor > blue_threshold)) {
         // detecting blue background
         blue_led = 0;
         red_led = 1;
-        green_led = 1;
+        //green_led = 1;
         colour_detection_periods++;
         if(colour % 4 == 0) {
             if(colour_detection_periods >= min_periods) {
@@ -183,7 +148,7 @@ void detect_colour() {
         // detecting red background
         blue_led = 1;
         red_led = 0;
-        green_led = 1;
+        //green_led = 1;
         colour_detection_periods++;
         
         if(colour % 4 == 0) {
@@ -201,7 +166,7 @@ void detect_colour() {
         // white background
         blue_led = 1;
         red_led = 1;
-        green_led = 0;
+        //green_led = 0;
         
         if(colour % 2 == 1) {
             colour++;
@@ -210,13 +175,33 @@ void detect_colour() {
     }
 }
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// ##########################################################
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-void intersection() {    
-    if (s6 + s7 + s8 < 3) {
-        if (s1 + s2 + s3 < 3) {                
-            intersection_bar = 0;
-        } else { intersection_bar = 1; }
-    } else { intersection_bar = 1; }
+int intersection(int se1, int se2, int se3, int se4, int se5, int se6, int se7, int se8) {    
+    intersection_bar_flag = 1;
+    green_led = 1;
+    if (se6 + se7 + se8 < 3) {
+        if (se1 + se2 + se3 < 3) {                
+            intersection_bar_flag = 0;
+        }
+    }
+    
+    if((se6 + se7 + se8 == 0) || (se1 + se2 + se3 == 0)){
+        intersection_bar_flag = 0;
+    }
+    
+    int section_bar = 1;
+    
+    if(intersection_bar_flag == 0) {
+        section_bar = 0;
+        green_led = 0;
+    } else {
+        section_bar = 1;
+        green_led = 1;
+    }
+    return section_bar;       
 }
 
 
@@ -226,8 +211,8 @@ void intersection() {
 int main() {
 
     // attach ISR functions
-    to.attach(&intersection, 0.02);
-    to.attach(&detect_colour, 0.05);
+    //to.attach(&intersection, 0.02585787);
+    to.attach(&detect_colour, 0.1);
     
     
     blue_led = 1;
@@ -236,6 +221,17 @@ int main() {
     
     enable1 = 1;
     enable2 = 1;
+    
+    /*play = 1;
+    skip = 1;
+    reset = 0;
+    wait(0.5);
+    reset = 1;
+    wait(0.2);
+    play = 0;
+    wait(0.5);
+    play = 1;*/
+    
     
     
     // PID controler setup
@@ -277,11 +273,13 @@ int main() {
         s7 = line_sensor_7.read();        
         s8 = line_sensor_8.read();
         
-        pid_input = 0.5*s1 + 0.25*s2 + 0.125*s3+ 0.0625*s4 - 0.0625*s5 - 0.125*s6 - 0.25*s7 - 0.5*s8;
+        pid_input = 0.5*s1 + 0.25*s2 + 0.125*s3 + 0.0625*s4 - 0.0625*s5 - 0.125*s6 - 0.25*s7 - 0.5*s8;
        
         controller.setProcessValue(pid_input);
         //disect the output of the pid controller and turn it into outputs for the two sets of wheels
         co = controller.compute(); // range [-full_speed; full_speed]
+        
+        intersection_bar = intersection(s1, s2, s3, s4, s5, s6, s7, s8);
         
         if (intersection_bar == 1) {
             if (co > 0) {
@@ -296,33 +294,44 @@ int main() {
         }
         else {
             if (disc_colour == 1) {
-                turn_left(0.5);
-                wait(0.25);
                 intersection_bar = 1;
-                intersection_time = always_on.read_us();
-                drop_time = intersection_time + wait_for_drop;
+                stop();
+                wait(1);
+                turn_left(0.5);
+                wait(0.5);
                                 
             } else {
-                turn_right(0.5);
-                wait(0.25);
                 intersection_bar = 1;
-                intersection_time = always_on.read_us();
-                
+                stop();
+                wait(1);
+                turn_right(0.5);
+                wait(0.5);               
             }
         }
         
         if(colour % 4 == 1) {
                 solenoid = 1;
+                /*play = 0;
+                wait(0.1);
+                play = 1;
+                wait(0.2);
+                skip = 0;
+                wait(0.1);
+                skip = 1;
+                play = 0;
+                wait(0.1);
+                play = 1;*/
+                
                 
         } else if(colour % 4 == 2) {
                 solenoid = 1;
                 
         } else if(colour % 4 == 3) {
             if(colour_detection_periods >= min_periods) {
-                if(always_on.read_us() > drop_time) {
-                    solenoid = 0;
-                    colour_detection_periods = 0;
-                }
+                solenoid = 0;
+                colour_detection_periods = 0;
+                /*play = 0;
+                play = 1;*/
             }
         }
         
