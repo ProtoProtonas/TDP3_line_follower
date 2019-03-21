@@ -1,6 +1,7 @@
 /* 
 ##########  parameters to adjust for line following ##########
-full_speed - duty cycle of pwm period for motor drive
+full_speed_straight - duty cycle of pwm period for motor drive while the robot is going straight ahead
+full_speed_turn - duty cycle of pwm for motor drive while it is turning (so that turning sharpness can be adjusted separately from straight line speed)
 rate - PID controller refresh rate
 period - while loop refresh time (motor drive changes at this rate
 threshold - threshold at which nothing is done to adjust the course of the robot
